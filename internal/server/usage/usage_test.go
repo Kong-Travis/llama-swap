@@ -117,6 +117,14 @@ func TestUsage_InvalidJSONIsAnError(t *testing.T) {
 	assert.ErrorContains(t, err, "invalid JSON in response body")
 }
 
+func TestUsage_BinaryBodyIsNotFound(t *testing.T) {
+	for _, contentType := range []string{"audio/wav", "audio/mpeg", "image/png", "video/mp4", "application/octet-stream"} {
+		u, err := Extract(hint.Unknown, "/v1/audio/speech", contentType, []byte("RIFF\x00\x00WAVEfmt "), time.Now())
+		require.NoError(t, err, contentType)
+		assert.False(t, u.Found, contentType)
+	}
+}
+
 func TestUsage_JSONWithoutUsageIsNotFound(t *testing.T) {
 	u := parseUsageJSON(t, hint.Unknown, "/v1/chat/completions", `{"error":"boom"}`)
 	assert.False(t, u.Found)

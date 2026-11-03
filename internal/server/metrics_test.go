@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -452,6 +453,29 @@ func TestServer_MetricsMiddleware_UpstreamAudioCaptureSkipsRespBody(t *testing.T
 	}
 	if len(cap.RespHeaders) == 0 {
 		t.Error("RespHeaders not stored; want captureRespHeaders mask")
+	}
+}
+
+func TestServer_MetricsMiddleware_AudioBodyLogsNoWarning(t *testing.T) {
+	var logs bytes.Buffer
+	mm := newTestMetricsMonitor(t, logmon.NewWriter(&logs), 100, 5)
+	cfg := config.Config{Models: map[string]config.ModelConfig{"m1": {}}}
+
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "audio/wav")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("RIFF\x00\x00WAVEfmt "))
+	})
+	handler := CreateMetricsMiddleware(mm, cfg)(inner)
+
+	req := httptest.NewRequest(http.MethodPost, "/upstream/m1/v1/audio/speech", strings.NewReader(`{"model":"m1","input":"hi"}`))
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	if len(metricsEntries(t, mm)) == 0 {
+		t.Fatal("no metrics recorded")
+	}
+	if strings.Contains(logs.String(), "invalid JSON") {
+		t.Errorf("audio response logged a JSON warning: %s", logs.String())
 	}
 }
 
