@@ -7,6 +7,7 @@ package usage
 import (
 	"bytes"
 	"fmt"
+	"mime"
 	"strings"
 	"time"
 
@@ -88,6 +89,11 @@ func Extract(u hint.Upstream, path, contentType string, body []byte, start time.
 		return usage, nil
 	}
 
+	if isBinaryMediaType(contentType) {
+		// Audio from /v1/audio/speech or an image carries no usage to read.
+		return Usage{}, nil
+	}
+
 	if !gjson.ValidBytes(body) {
 		return Usage{}, fmt.Errorf("invalid JSON in response body")
 	}
@@ -100,6 +106,23 @@ func Extract(u hint.Upstream, path, contentType string, body []byte, start time.
 		usage.Found = true
 	}
 	return usage, nil
+}
+
+// isBinaryMediaType reports whether contentType names audio, image, video or
+// opaque bytes: a body that can never be a JSON usage document.
+func isBinaryMediaType(contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+	switch {
+	case strings.HasPrefix(mediaType, "audio/"),
+		strings.HasPrefix(mediaType, "image/"),
+		strings.HasPrefix(mediaType, "video/"),
+		mediaType == "application/octet-stream":
+		return true
+	}
+	return false
 }
 
 // forEachSSEData calls fn with the payload of every non-empty data: line in
